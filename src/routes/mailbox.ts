@@ -27,7 +27,14 @@ mailbox.get('/config', async (c) => {
 // GET /api/mailboxes - 列表
 mailbox.get('/mailboxes', async (c) => {
   const result = await c.env.DB.prepare(
-    'SELECT id, address, local_part, domain, is_auto_created, created_at FROM mailboxes ORDER BY created_at DESC'
+    `SELECT m.id, m.address, m.local_part, m.domain, m.is_auto_created, m.created_at,
+            MAX(msg.received_at) as last_message_at,
+            COUNT(msg.id) as message_count,
+            SUM(CASE WHEN msg.is_read = 0 THEN 1 ELSE 0 END) as unread_count
+     FROM mailboxes m
+     LEFT JOIN messages msg ON msg.mailbox_id = m.id
+     GROUP BY m.id
+     ORDER BY last_message_at DESC NULLS LAST, m.created_at DESC`
   ).all()
 
   return c.json({ mailboxes: result.results })

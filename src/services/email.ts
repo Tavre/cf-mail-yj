@@ -50,6 +50,10 @@ function getExtension(filename: string, contentType: string): string {
   return mimeMap[contentType] || 'bin'
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 // 尝试自动创建邮箱
 async function tryAutoCreateMailbox(db: D1Database, address: string): Promise<{ id: number } | null> {
   // 读取配置
@@ -199,16 +203,20 @@ async function sendTelegramNotification(
   }
 ): Promise<void> {
   try {
-    const codeText = email.verificationCode ? `\n🔑 验证码: ${email.verificationCode}` : ''
-    const text = `📬 新邮件 #email
+    const codeText = email.verificationCode ? `\n验证码: <code>${escapeHtml(email.verificationCode)}</code>` : ''
+    const text = `新邮件
 
-📤 发件人: ${email.from}
-📥 收件人: ${email.to}
-📋 主题: ${email.subject}${codeText}
+发件人: ${escapeHtml(email.from)}
+收件人: ${escapeHtml(email.to)}
+主题: ${escapeHtml(email.subject)}${codeText}
 
-${email.preview}`
+${escapeHtml(email.preview)}`
 
-    const body: { chat_id: string; text: string; message_thread_id?: number } = { chat_id: chatId, text }
+    const body: { chat_id: string; text: string; parse_mode: string; message_thread_id?: number } = {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+    }
     if (topicId) body.message_thread_id = parseInt(topicId)
 
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
