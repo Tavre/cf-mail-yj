@@ -10,7 +10,6 @@ const MAX_EMAIL_SIZE = 25 * 1024 * 1024 // 25MB
 interface Env {
   DB: D1Database
   R2: R2Bucket
-  MAIL_DOMAIN: string
   TG_BOT_TOKEN?: string
   TG_CHAT_ID?: string
 }

@@ -3,7 +3,6 @@ import { Hono } from 'hono'
 type Bindings = {
   DB: D1Database
   R2: R2Bucket
-  MAIL_DOMAIN: string
 }
 
 const mailbox = new Hono<{ Bindings: Bindings }>()
@@ -19,8 +18,9 @@ function generateRandomAddress(): string {
 }
 
 // GET /api/config - 获取配置信息
-mailbox.get('/config', (c) => {
-  const domains = (c.env.MAIL_DOMAIN || '').split(',').map((d) => d.trim()).filter(Boolean)
+mailbox.get('/config', async (c) => {
+  const result = await c.env.DB.prepare('SELECT DISTINCT domain FROM mailboxes ORDER BY domain ASC').all<{ domain: string }>()
+  const domains = (result.results || []).map((row) => row.domain).filter(Boolean)
   return c.json({ domains })
 })
 
@@ -36,29 +36,36 @@ mailbox.get('/mailboxes', async (c) => {
 // POST /api/mailboxes - 创建
 mailbox.post('/mailboxes', async (c) => {
   const body = await c.req.json<{ address?: string; domain?: string }>()
-  // 从环境变量获取允许的域名列表
-  const allowedDomains = (c.env.MAIL_DOMAIN || '').split(',').map((d) => d.trim()).filter(Boolean)
-  // 如果没有配置域名，回退到默认行为（取第一个，或者报错，这里暂时取第一个作为默认）
-  const defaultDomain = allowedDomains[0] || 'localhost'
-
-  // 确定使用的域名
-  let domain = defaultDomain
-  if (body.domain) {
-    if (!allowedDomains.includes(body.domain)) {
-      return c.json({ error: 'Invalid domain' }, 400)
-    }
-    domain = body.domain
-  }
 
   let localPart: string
+  let domain: string
+
   if (body.address) {
-    // 自定义地址：只取 @ 前面部分
-    localPart = body.address.split('@')[0].toLowerCase().trim()
-    if (!localPart || !/^[a-z0-9._-]+$/.test(localPart)) {
+    const normalized = body.address.toLowerCase().trim()
+
+    if (normalized.includes('@')) {
+      const parts = normalized.split('@')
+      if (parts.length !== 2 || !parts[0] || !parts[1]) {
+        return c.json({ error: 'Invalid address format' }, 400)
+      }
+      localPart = parts[0]
+      domain = parts[1]
+    } else {
+      localPart = normalized
+      domain = body.domain?.toLowerCase().trim() || ''
+      if (!domain) {
+        return c.json({ error: 'Domain is required' }, 400)
+      }
+    }
+
+    if (!/^[a-z0-9._-]+$/.test(localPart) || !/^[a-z0-9.-]+$/.test(domain) || !domain.includes('.')) {
       return c.json({ error: 'Invalid address format' }, 400)
     }
   } else {
-    // 随机生成
+    domain = body.domain?.toLowerCase().trim() || ''
+    if (!domain || !/^[a-z0-9.-]+$/.test(domain) || !domain.includes('.')) {
+      return c.json({ error: 'Domain is required' }, 400)
+    }
     localPart = generateRandomAddress()
   }
 

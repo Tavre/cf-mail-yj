@@ -71,10 +71,13 @@ Just Simple One CF-Mail.
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `ADMIN_PASSWORD` | `Changeyourpasswordbeforeusingcfmail` | 登录密码，**必须修改** |
-| `JWT_SECRET` | `changeyourjwttokenbeforeusingcfmail` | JWT 密钥，**必须修改** |
-| `MAIL_DOMAIN` | `example.com,example2.com` | 改成你的域名 |
 
-![alt text](<asset/image copy.png>)
+JWT 密钥会在首次运行时自动生成并保存在数据库里，无需手动配置。
+
+域名也不需要预先填写：
+- Email Routing 的 **Catch-all** 指向这个 Worker 后，邮件就会正常投递
+- 首次手动创建邮箱时，请直接输入完整地址（如 `test@example.com`）
+- 创建成功后，这个域名会自动出现在后续创建邮箱的下拉框里
 
 **5. 绑定 D1 数据库和 R2 存储**
 
