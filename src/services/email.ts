@@ -152,11 +152,11 @@ export async function handleEmail(
 
   // 插入邮件记录
   const messageResult = await env.DB.prepare(
-    `INSERT INTO messages (mailbox_id, sender, subject, preview, verification_code, r2_key)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO messages (mailbox_id, sender, subject, preview, verification_code, text_content, html_content, r2_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING id`
   )
-    .bind(mailboxRow.id, parsed.from, parsed.subject, preview, verificationCode, emlKey)
+    .bind(mailboxRow.id, parsed.from, parsed.subject, preview, verificationCode, parsed.text || '', parsed.html || '', emlKey)
     .first<{ id: number }>()
 
   if (!messageResult) {

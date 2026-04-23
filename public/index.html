@@ -253,14 +253,40 @@
                     </button>
                 </div>
 
+                <div x-show="messages.length > 0" class="px-4 py-2 border-b border-gray-100 bg-white flex items-center justify-between gap-2">
+                    <label class="flex items-center gap-2 text-xs text-gray-600">
+                        <input type="checkbox" class="rounded border-gray-300"
+                            :checked="allMessagesSelected"
+                            @change="toggleAllMessages($event.target.checked)">
+                        <span x-text="selectedMessageIds.length ? `${selectedMessageIds.length} selected` : 'Select messages'"></span>
+                    </label>
+
+                    <div class="flex items-center gap-2" x-show="selectedMessageIds.length > 0">
+                        <button @click="batchMarkMessagesRead"
+                            class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition">
+                            Mark Read
+                        </button>
+                        <button @click="batchDeleteMessages"
+                            class="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+
                 <div class="overflow-y-auto flex-1">
                     <template x-for="msg in messages" :key="msg.id">
                         <div @click="selectMessage(msg.id)"
                             class="p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition"
                             :class="{'bg-blue-50/60': selectedMessage?.id === msg.id, 'bg-white': selectedMessage?.id !== msg.id}">
-                            <div class="flex justify-between items-start mb-1">
-                                <span class="font-semibold text-gray-900 text-sm truncate w-2/3"
-                                    x-text="msg.sender || 'Unknown'"></span>
+                            <div class="flex justify-between items-start gap-2 mb-1">
+                                <div class="flex items-start gap-2 min-w-0 flex-1">
+                                    <input type="checkbox" class="mt-0.5 rounded border-gray-300"
+                                        :checked="selectedMessageIds.includes(msg.id)"
+                                        @click.stop
+                                        @change="toggleMessageSelection(msg.id, $event.target.checked)">
+                                    <span class="font-semibold text-gray-900 text-sm truncate"
+                                        x-text="msg.sender || 'Unknown'"></span>
+                                </div>
                                 <span class="text-xs text-gray-500 whitespace-nowrap"
                                     x-text="formatDate(msg.received_at)"></span>
                             </div>
@@ -294,8 +320,37 @@
             <!-- Empty State for Message List -->
             <div class="flex-1 flex items-center justify-center bg-gray-50 text-gray-400 flex-col"
                 x-show="!selectedMailbox">
-                <i class="ph ph-sidebar text-4xl mb-3"></i>
-                <p>Select a mailbox to view messages</p>
+                <template x-if="mailboxes.length === 0">
+                    <div class="max-w-md bg-white border border-gray-200 rounded-2xl shadow-sm p-6 text-left text-gray-600">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                                <i class="ph ph-signpost text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-base font-semibold text-gray-900">首次使用引导</h3>
+                                <p class="text-sm text-gray-500">先创建第一个完整邮箱地址，后续域名会自动进入下拉框。</p>
+                            </div>
+                        </div>
+
+                        <ol class="space-y-2 text-sm list-decimal list-inside">
+                            <li>在 Cloudflare Email Routing 里把 Catch-all 指到这个 Worker。</li>
+                            <li>点击下方按钮，输入完整邮箱，例如 <code class="bg-gray-100 px-1 rounded">support@example.com</code>。</li>
+                            <li>创建成功后，这个域名会自动保存，后续可直接生成同域名邮箱。</li>
+                        </ol>
+
+                        <button @click="showCreateModal = true"
+                            class="mt-5 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition">
+                            创建第一个邮箱
+                        </button>
+                    </div>
+                </template>
+
+                <template x-if="mailboxes.length > 0">
+                    <div class="flex items-center justify-center flex-col">
+                        <i class="ph ph-sidebar text-4xl mb-3"></i>
+                        <p>Select a mailbox to view messages</p>
+                    </div>
+                </template>
             </div>
 
             <!-- Right: Message Detail -->
@@ -357,12 +412,12 @@
                         <!-- Attachments -->
                         <div x-show="selectedMessage?.attachments?.length > 0" class="flex flex-wrap gap-2 mb-6">
                             <template x-for="att in selectedMessage?.attachments" :key="att.id">
-                                <div
-                                    class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-700">
+                                <a :href="'/api/attachments/' + att.id" target="_blank"
+                                    class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-blue-300 hover:text-blue-600 transition">
                                     <i class="ph ph-paperclip"></i>
                                     <span x-text="att.filename" class="truncate max-w-[150px]"></span>
                                     <span class="text-xs text-gray-400" x-text="formatSize(att.size)"></span>
-                                </div>
+                                </a>
                             </template>
                         </div>
                     </div>
@@ -372,7 +427,8 @@
                         <div class="w-full h-full min-h-[500px] bg-white">
                             <template x-if="selectedMessage">
                                 <iframe class="w-full h-full min-h-[600px] border-none"
-                                    :srcdoc="selectedMessage.html || '<pre class=\'p-4 font-sans whitespace-pre-wrap\'>' + (selectedMessage.text || 'No content') + '</pre>'"
+                                    sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                    :srcdoc="selectedMessage.safe_html"
                                     x-init="$watch('selectedMessage', () => { imagePreview = null })"
                                     @load="
                                         $el.style.height = $el.contentWindow.document.documentElement.scrollHeight + 'px';
@@ -412,7 +468,7 @@
 
     <!-- Footer -->
     <!-- Social Buttons (Dynamic Position) -->
-    <div class="fixed transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] z-50 flex gap-3 pointer-events-none"
+    <div class="fixed transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] z-50 flex gap-3"
         :class="isLoggedIn ? 'top-4 right-6 transform translate-x-0' : 'bottom-4 left-1/2 transform -translate-x-1/2'">
         <a href="https://github.com/lyon-le/cf-mail" target="_blank"
             class="pointer-events-auto bg-white/80 hover:bg-white backdrop-blur shadow-sm border border-gray-200 text-gray-700 hover:text-black px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 transition">
@@ -547,6 +603,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">Bot Token <span class="text-red-500">*</span></label>
                             <input type="password" x-model="settings.tg_bot_token" placeholder="123456:ABC-DEF..." required
                                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                            <p x-show="tgBotTokenConfigured" class="text-xs text-gray-500 mt-1">已配置 Token。为了安全不会回显，留空表示保留原值。</p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Chat ID <span class="text-red-500">*</span></label>
@@ -586,6 +643,49 @@
         </div>
     </div>
 
+    <!-- Force Password Change Modal -->
+    <div x-show="passwordChangeRequired" x-cloak
+        class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+                    <i class="ph ph-shield-warning text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">请先修改默认密码</h3>
+                    <p class="text-sm text-gray-500">检测到系统仍在使用默认管理员密码，修改后才能继续操作。</p>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                    <input type="password" x-model="passwordChangeForm.currentPassword"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <input type="password" x-model="passwordChangeForm.newPassword"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                    <input type="password" x-model="passwordChangeForm.confirmPassword"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <div x-show="passwordChangeError" class="text-sm text-red-500" x-text="passwordChangeError"></div>
+
+                <button @click="changePassword"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2"
+                    :disabled="changingPassword">
+                    <span x-show="!changingPassword">Save and Continue</span>
+                    <i x-show="changingPassword" class="ph ph-spinner animate-spin text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Image Preview Modal -->
     <div x-show="imagePreview" x-cloak
         class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center"
@@ -615,6 +715,7 @@
                 mailboxes: [],
                 searchQuery: '',
                 messages: [],
+                selectedMessageIds: [],
                 selectedMailbox: null,
                 selectedMessage: null,
                 // 图片预览
@@ -623,7 +724,6 @@
                 imageDragging: false,
                 dragStart: { x: 0, y: 0 },
                 isLoadingMessages: false,
-                isLoadingContent: false,
                 isLoadingContent: false,
                 showCreateModal: false,
                 newMailboxAddress: '',
@@ -642,6 +742,15 @@
                 },
                 tgEnabled: false,
                 fetchingChatId: false,
+                tgBotTokenConfigured: false,
+                passwordChangeRequired: false,
+                passwordChangeError: '',
+                changingPassword: false,
+                passwordChangeForm: {
+                    currentPassword: '',
+                    newPassword: '',
+                    confirmPassword: ''
+                },
 
                 get filteredMailboxes() {
                     if (!this.searchQuery.trim()) return this.mailboxes;
@@ -649,11 +758,13 @@
                     return this.mailboxes.filter(box => box.address.toLowerCase().includes(q));
                 },
 
+                get allMessagesSelected() {
+                    return this.messages.length > 0 && this.selectedMessageIds.length === this.messages.length;
+                },
+
                 async init() {
-                    // Check auth status by trying to fetch mailboxes (or check cookie existence if we could, but HTTPOnly)
-                    // We'll just try to fetch mailboxes, if 401 then not logged in.
                     await this.fetchConfig();
-                    await this.checkAuth();
+                    await this.fetchSession();
                 },
 
                 async fetchConfig() {
@@ -671,19 +782,58 @@
                     }
                 },
 
-                async checkAuth() {
+                resetAuthenticatedState() {
+                    this.isLoggedIn = false;
+                    this.mailboxes = [];
+                    this.messages = [];
+                    this.selectedMessageIds = [];
+                    this.selectedMailbox = null;
+                    this.selectedMessage = null;
+                    this.showCreateModal = false;
+                    this.showSettingsModal = false;
+                    this.passwordChangeRequired = false;
+                    this.passwordChangeError = '';
+                    this.passwordChangeForm = {
+                        currentPassword: '',
+                        newPassword: '',
+                        confirmPassword: ''
+                    };
+                },
+
+                async ensureApiAccess(res) {
+                    if (res.status === 401) {
+                        this.resetAuthenticatedState();
+                        return false;
+                    }
+
+                    if (res.status === 403) {
+                        const data = await res.clone().json().catch(() => null);
+                        if (data?.code === 'PASSWORD_CHANGE_REQUIRED') {
+                            this.passwordChangeRequired = true;
+                            this.passwordChangeError = '';
+                            return false;
+                        }
+                    }
+
+                    return true;
+                },
+
+                async fetchSession() {
                     try {
-                        const res = await fetch('/api/mailboxes');
-                        if (res.ok) {
+                        const res = await fetch('/api/session');
+                        const data = await res.json();
+                        if (res.ok && data.authenticated) {
                             this.isLoggedIn = true;
-                            const data = await res.json();
-                            this.mailboxes = data.mailboxes;
-                        } else if (res.status === 401) {
-                            this.isLoggedIn = false;
+                            this.passwordChangeRequired = !!data.mustChangePassword;
+                            if (!this.passwordChangeRequired) {
+                                await this.fetchMailboxes();
+                            }
+                        } else {
+                            this.resetAuthenticatedState();
                         }
                     } catch (e) {
-                        console.error("Auth check failed", e);
-                        this.isLoggedIn = false;
+                        console.error("Session check failed", e);
+                        this.resetAuthenticatedState();
                     }
                 },
 
@@ -700,8 +850,14 @@
 
                         if (res.ok) {
                             this.isLoggedIn = true;
+                            this.passwordChangeRequired = !!data.mustChangePassword;
+                            this.passwordChangeError = '';
+                            if (this.passwordChangeRequired) {
+                                this.passwordChangeForm.currentPassword = this.password;
+                            } else {
+                                await this.fetchMailboxes();
+                            }
                             this.password = '';
-                            this.fetchMailboxes();
                         } else {
                             this.loginError = data.error || 'Login failed';
                         }
@@ -714,15 +870,12 @@
 
                 async logout() {
                     await fetch('/api/logout', { method: 'POST' });
-                    this.isLoggedIn = false;
-                    this.mailboxes = [];
-                    this.selectedMailbox = null;
-                    this.messages = [];
-                    this.selectedMessage = null;
+                    this.resetAuthenticatedState();
                 },
 
                 async fetchMailboxes() {
                     const res = await fetch('/api/mailboxes');
+                    if (!(await this.ensureApiAccess(res))) return;
                     if (res.ok) {
                         const data = await res.json();
                         this.mailboxes = data.mailboxes;
@@ -730,6 +883,11 @@
                 },
 
                 async createMailbox() {
+                    if (!this.newMailboxAddress && this.availableDomains.length === 0) {
+                        alert('请先输入一个完整邮箱地址，例如 support@example.com');
+                        return;
+                    }
+
                     this.isCreating = true;
                     try {
                         const payload = this.newMailboxAddress
@@ -743,6 +901,7 @@
                             body: JSON.stringify(payload)
                         });
 
+                        if (!(await this.ensureApiAccess(res))) return;
                         if (res.ok) {
                             await this.fetchMailboxes();
                             await this.fetchConfig();
@@ -763,10 +922,12 @@
                     if (!confirm('Are you sure? All messages in this mailbox will be deleted.')) return;
 
                     const res = await fetch(`/api/mailboxes/${id}`, { method: 'DELETE' });
+                    if (!(await this.ensureApiAccess(res))) return;
                     if (res.ok) {
                         if (this.selectedMailbox?.id === id) {
                             this.selectedMailbox = null;
                             this.messages = [];
+                            this.selectedMessageIds = [];
                             this.selectedMessage = null;
                         }
                         await this.fetchMailboxes();
@@ -775,15 +936,18 @@
 
                 async selectMailbox(box) {
                     this.selectedMailbox = box;
+                    this.selectedMessageIds = [];
                     this.selectedMessage = null;
                     await this.fetchMessages(box.id);
                 },
 
                 async fetchMessages(mailboxId) {
                     this.isLoadingMessages = true;
-                    this.messages = []; // Clear while loading
+                    this.messages = [];
+                    this.selectedMessageIds = [];
                     try {
                         const res = await fetch(`/api/mailboxes/${mailboxId}/messages`);
+                        if (!(await this.ensureApiAccess(res))) return;
                         if (res.ok) {
                             const data = await res.json();
                             this.messages = data.messages;
@@ -800,9 +964,16 @@
                     this.selectedMessage = { id }; // Placeholder
                     try {
                         const res = await fetch(`/api/messages/${id}`);
+                        if (!(await this.ensureApiAccess(res))) {
+                            this.selectedMessage = null;
+                            return;
+                        }
                         if (res.ok) {
                             const data = await res.json();
-                            this.selectedMessage = data.message;
+                            this.selectedMessage = {
+                                ...data.message,
+                                safe_html: this.buildMessageHtml(data.message)
+                            };
 
                             // Mark local message as read
                             const msgIndex = this.messages.findIndex(m => m.id === id);
@@ -819,10 +990,169 @@
                     if (!confirm('Delete this message?')) return;
 
                     const res = await fetch(`/api/messages/${id}`, { method: 'DELETE' });
+                    if (!(await this.ensureApiAccess(res))) return;
                     if (res.ok) {
                         this.selectedMessage = null;
+                        this.selectedMessageIds = this.selectedMessageIds.filter(messageId => messageId !== id);
                         await this.fetchMessages(this.selectedMailbox.id);
+                        await this.fetchMailboxes();
                     }
+                },
+
+                toggleMessageSelection(id, checked) {
+                    if (checked) {
+                        if (!this.selectedMessageIds.includes(id)) {
+                            this.selectedMessageIds = [...this.selectedMessageIds, id];
+                        }
+                        return;
+                    }
+
+                    this.selectedMessageIds = this.selectedMessageIds.filter(messageId => messageId !== id);
+                },
+
+                toggleAllMessages(checked) {
+                    this.selectedMessageIds = checked ? this.messages.map(msg => msg.id) : [];
+                },
+
+                async batchMarkMessagesRead() {
+                    if (this.selectedMessageIds.length === 0) return;
+
+                    const res = await fetch('/api/messages/batch-read', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: this.selectedMessageIds })
+                    });
+
+                    if (!(await this.ensureApiAccess(res))) return;
+                    if (res.ok) {
+                        this.messages = this.messages.map(msg => this.selectedMessageIds.includes(msg.id)
+                            ? { ...msg, is_read: 1 }
+                            : msg
+                        );
+                        this.selectedMessageIds = [];
+                        await this.fetchMailboxes();
+                        this.showToast('Selected messages marked as read');
+                    }
+                },
+
+                async batchDeleteMessages() {
+                    if (this.selectedMessageIds.length === 0) return;
+                    if (!confirm(`Delete ${this.selectedMessageIds.length} selected messages?`)) return;
+
+                    const deletingIds = [...this.selectedMessageIds];
+                    const res = await fetch('/api/messages/batch-delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: deletingIds })
+                    });
+
+                    if (!(await this.ensureApiAccess(res))) return;
+                    if (res.ok) {
+                        if (this.selectedMessage?.id && deletingIds.includes(this.selectedMessage.id)) {
+                            this.selectedMessage = null;
+                        }
+                        this.selectedMessageIds = [];
+                        await this.fetchMessages(this.selectedMailbox.id);
+                        await this.fetchMailboxes();
+                        this.showToast('Selected messages deleted');
+                    }
+                },
+
+                escapeHtml(value) {
+                    return String(value || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                },
+
+                sanitizeEmailHtml(html) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html || '', 'text/html');
+
+                    doc.querySelectorAll('script, iframe, frame, object, embed, form, input, button, textarea, select, link, base, meta[http-equiv]').forEach(el => el.remove());
+
+                    doc.querySelectorAll('*').forEach(el => {
+                        [...el.attributes].forEach(attr => {
+                            const name = attr.name.toLowerCase();
+                            const value = (attr.value || '').trim();
+
+                            if (name.startsWith('on') || name === 'srcdoc' || name === 'formaction' || name === 'style') {
+                                el.removeAttribute(attr.name);
+                                return;
+                            }
+
+                            if (name === 'href') {
+                                if (/^javascript:/i.test(value)) {
+                                    el.removeAttribute(attr.name);
+                                    return;
+                                }
+                                if (/^(https?:|mailto:)/i.test(value) || value.startsWith('#')) {
+                                    if (el.tagName === 'A') {
+                                        el.setAttribute('target', '_blank');
+                                        el.setAttribute('rel', 'noopener noreferrer');
+                                    }
+                                } else {
+                                    el.removeAttribute(attr.name);
+                                }
+                                return;
+                            }
+
+                            if (name === 'src') {
+                                if (/^(data:|cid:)/i.test(value)) return;
+                                if (/^(https?:)?\/\//i.test(value)) {
+                                    el.setAttribute('data-blocked-src', value);
+                                    el.removeAttribute(attr.name);
+                                    if (el.tagName === 'IMG' && !el.getAttribute('alt')) {
+                                        el.setAttribute('alt', 'Remote image blocked');
+                                    }
+                                    return;
+                                }
+                                el.removeAttribute(attr.name);
+                                return;
+                            }
+
+                            if (name === 'srcset' || name === 'poster') {
+                                el.removeAttribute(attr.name);
+                            }
+                        });
+                    });
+
+                    const bodyHtml = doc.body.innerHTML.trim() || `<pre>No content</pre>`;
+                    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; padding: 16px; line-height: 1.6; word-break: break-word; }
+        img { max-width: 100%; height: auto; }
+        table { max-width: 100%; border-collapse: collapse; }
+        pre { white-space: pre-wrap; word-break: break-word; }
+        blockquote { margin: 0; padding-left: 12px; border-left: 3px solid #e2e8f0; color: #475569; }
+        a { color: #2563eb; }
+    </style>
+</head>
+<body>${bodyHtml}</body>
+</html>`;
+                },
+
+                buildMessageHtml(message) {
+                    if (message?.html) {
+                        return this.sanitizeEmailHtml(message.html);
+                    }
+
+                    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; padding: 16px; }
+        pre { white-space: pre-wrap; word-break: break-word; }
+    </style>
+</head>
+<body><pre>${this.escapeHtml(message?.text || 'No content')}</pre></body>
+</html>`;
                 },
 
                 formatDate(isoString) {
@@ -850,6 +1180,7 @@
                 },
 
                 async copyToClipboard(text) {
+                    if (!text) return;
                     try {
                         await navigator.clipboard.writeText(text);
                         // Optional: show a toast or change icon briefly
@@ -878,10 +1209,12 @@
                 async fetchSettings() {
                     try {
                         const res = await fetch('/api/settings');
+                        if (!(await this.ensureApiAccess(res))) return;
                         if (res.ok) {
                             const data = await res.json();
-                            this.settings = { ...this.settings, ...data.settings };
-                            this.tgEnabled = !!(this.settings.tg_bot_token && this.settings.tg_chat_id);
+                            this.settings = { ...this.settings, ...data.settings, tg_bot_token: '' };
+                            this.tgBotTokenConfigured = !!data.settings.tg_bot_token_configured;
+                            this.tgEnabled = this.tgBotTokenConfigured || !!this.settings.tg_chat_id;
                         }
                     } catch (e) {
                         console.error('Failed to fetch settings', e);
@@ -895,13 +1228,29 @@
                             data.tg_bot_token = '';
                             data.tg_chat_id = '';
                             data.tg_topic_id = '';
+                            data.clear_tg_bot_token = true;
+                        } else {
+                            if (!this.tgBotTokenConfigured && !data.tg_bot_token) {
+                                alert('请输入 Bot Token');
+                                return;
+                            }
+                            if (!data.tg_bot_token) {
+                                delete data.tg_bot_token;
+                            }
+                            if (!data.tg_chat_id) {
+                                alert('请输入 Chat ID');
+                                return;
+                            }
                         }
                         const res = await fetch('/api/settings', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(data)
                         });
+                        if (!(await this.ensureApiAccess(res))) return;
                         if (res.ok) {
+                            this.tgBotTokenConfigured = this.tgEnabled ? (this.tgBotTokenConfigured || !!this.settings.tg_bot_token) : false;
+                            this.settings.tg_bot_token = '';
                             this.showToast('Settings saved');
                             this.showSettingsModal = false;
                         }
@@ -913,12 +1262,14 @@
                 async deleteAutoCreatedMailboxes() {
                     if (!confirm('Delete all auto-created mailboxes?')) return;
                     const res = await fetch('/api/mailboxes-auto-created', { method: 'DELETE' });
+                    if (!(await this.ensureApiAccess(res))) return;
                     if (res.ok) {
                         const data = await res.json();
                         this.showToast(`Deleted ${data.deleted} mailboxes`);
                         await this.fetchMailboxes();
                         this.selectedMailbox = null;
                         this.messages = [];
+                        this.selectedMessageIds = [];
                         this.selectedMessage = null;
                     }
                 },
@@ -944,6 +1295,55 @@
                         alert('获取失败');
                     } finally {
                         this.fetchingChatId = false;
+                    }
+                },
+
+                async changePassword() {
+                    this.passwordChangeError = '';
+
+                    if (!this.passwordChangeForm.currentPassword) {
+                        this.passwordChangeError = 'Please enter the current password';
+                        return;
+                    }
+
+                    if (!this.passwordChangeForm.newPassword || this.passwordChangeForm.newPassword.length < 8) {
+                        this.passwordChangeError = 'New password must be at least 8 characters';
+                        return;
+                    }
+
+                    if (this.passwordChangeForm.newPassword !== this.passwordChangeForm.confirmPassword) {
+                        this.passwordChangeError = 'New passwords do not match';
+                        return;
+                    }
+
+                    this.changingPassword = true;
+                    try {
+                        const res = await fetch('/api/change-password', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                currentPassword: this.passwordChangeForm.currentPassword,
+                                newPassword: this.passwordChangeForm.newPassword
+                            })
+                        });
+
+                        const data = await res.json();
+                        if (res.ok) {
+                            this.passwordChangeRequired = false;
+                            this.passwordChangeForm = {
+                                currentPassword: '',
+                                newPassword: '',
+                                confirmPassword: ''
+                            };
+                            this.showToast('Password updated');
+                            await this.fetchMailboxes();
+                        } else {
+                            this.passwordChangeError = data.error || 'Failed to update password';
+                        }
+                    } catch (e) {
+                        this.passwordChangeError = 'Failed to update password';
+                    } finally {
+                        this.changingPassword = false;
                     }
                 },
 

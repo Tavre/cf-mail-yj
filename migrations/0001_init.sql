@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS mailboxes (
     address TEXT NOT NULL UNIQUE,
     local_part TEXT NOT NULL,
     domain TEXT NOT NULL,
+    is_auto_created INTEGER DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -15,6 +16,8 @@ CREATE TABLE IF NOT EXISTS messages (
     subject TEXT NOT NULL,
     preview TEXT,
     verification_code TEXT,
+    text_content TEXT,
+    html_content TEXT,
     r2_key TEXT NOT NULL,
     received_at TEXT DEFAULT CURRENT_TIMESTAMP,
     is_read INTEGER DEFAULT 0,
@@ -31,6 +34,12 @@ CREATE TABLE IF NOT EXISTS attachments (
     hash TEXT NOT NULL,
     r2_key TEXT NOT NULL,
     FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+);
+
+-- 设置表
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 -- 索引
